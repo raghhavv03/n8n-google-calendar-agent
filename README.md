@@ -1,134 +1,164 @@
-# 📅 n8n Calendar Agent — AI Chat Assistant
+# n8n Google Calendar Agent
 
-[![Next.js](https://img.shields.io/badge/Next.js-16.2-black?style=flat-square&logo=next.js)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-19.2-61DAFB?style=flat-square&logo=react)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
-[![n8n](https://img.shields.io/badge/n8n-Workflow_Automation-FF6D5A?style=flat-square&logo=n8n)](https://n8n.io/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.0-06B6D4?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
+Natural-language Google Calendar assistant: a Next.js chat UI that talks to an n8n AI Agent workflow, which creates and retrieves events through the Google Calendar API.
 
-A modern, conversational AI assistant for managing Google Calendar through natural language. Built with a responsive **Next.js 16** frontend and powered by an **n8n AI Agent** workflow backend. 
+The exported workflow lives in [`n8n/google_calendar_agent.json`](n8n/google_calendar_agent.json) and can be imported into any n8n instance (Cloud or self-hosted).
 
-The complete n8n workflow definition is included in [`n8n/google_calendar_agent.json`](file:///Users/raghhavv03/Workspace/Projects/n8n-calendar-agent/n8n/google_calendar_agent.json) and can be imported directly into any n8n instance.
+## Features
 
----
+- **Conversational scheduling** — create events from plain English (title, start/end, optional description/location/attendees inferred by the agent when provided)
+- **Calendar queries** — ask for today’s schedule, this week’s events, or a custom date range
+- **Agent tooling** — LangChain AI Agent in n8n with OpenAI (`gpt-4.1-mini`) and Google Calendar tool nodes for create and list
+- **Session memory** — n8n buffer memory (10-message window) keyed by `userId` / `session.id`
+- **Chat UI** — responsive Next.js App Router client with markdown replies, light/dark theme, example prompts, and conversation clear
 
-## 🏗️ Architecture & Data Flow
+## Architecture
 
-```text
-┌─────────────────┐       HTTP POST       ┌────────────────┐       LangChain       ┌──────────────────┐
-│  Next.js Chat   │ ────────────────────► │  n8n Webhook   │ ────────────────────► │   n8n AI Agent   │
-│  User Interface │ ◄──────────────────── │  Parent Engine │ ◄──────────────────── │ (GPT-4.1-mini)   │
-└─────────────────┘     JSON / Text       └────────────────┘       Tool Calls      └────────┬─────────┘
-                                                                                            │
-                                                                                 Google Calendar API
-                                                                                            │
-                                                                                            ▼
-                                                                                   ┌──────────────────┐
-                                                                                   │ Google Calendar  │
-                                                                                   │ (Create / Read)  │
-                                                                                   └──────────────────┘
+```mermaid
+flowchart LR
+  UI["Next.js Chat UI"] -->|POST JSON message + userId| WH["n8n Webhook"]
+  WH --> SET["Edit Fields"]
+  SET --> AGENT["AI Agent"]
+  AGENT --> LLM["OpenAI gpt-4.1-mini"]
+  AGENT --> MEM["Simple Memory"]
+  AGENT --> CREATE["Create Calendar Event"]
+  AGENT --> GET["Get Many Events"]
+  CREATE --> GCAL["Google Calendar API"]
+  GET --> GCAL
+  AGENT --> IF["If webhook path"]
+  IF --> RESP["Respond to Webhook"]
+  RESP -->|plain text output| UI
 ```
 
----
+The frontend is a thin client. Orchestration, LLM reasoning, tool calls, OAuth to Google, and response formatting happen in n8n. The exported workflow includes both a webhook entry path and an “executed by another workflow” trigger, so it can run standalone or as a sub-workflow.
 
-## ✨ Features
+## Tech stack
 
-- **Natural Language Calendar Management:** Schedule meetings, check schedules, and block time using plain conversational English.
-- **Intelligent Event Handling:** Automatically infers event titles, dates, start times, and durations from ambiguous user prompts.
-- **Bi-directional Google Calendar Integration:** Supports creating new calendar events and querying existing events by date ranges.
-- **Modern & Responsive UI:** Built with Next.js App Router, Framer Motion animations, Lucide icons, and light/dark theme switching.
-- **Rich Markdown Formatting:** Assistant responses render lists, formatted event summaries, and emphasis with GitHub Flavored Markdown.
-- **Serverless & Decoupled:** Requires no dedicated backend application server—n8n handles orchestration, LLM reasoning, and API authentication.
+| Layer | Technology |
+| --- | --- |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript |
+| UI | Tailwind CSS 4, Framer Motion, Lucide React, `react-markdown` + `remark-gfm` |
+| Automation | n8n (LangChain AI Agent, Webhook, Respond to Webhook) |
+| LLM | OpenAI Chat Model via n8n (`gpt-4.1-mini` in the exported workflow) |
+| Calendar | Google Calendar OAuth2 tool nodes in n8n |
 
----
-
-## 🛠️ Tech Stack
-
-- **Frontend Framework:** [Next.js 16](https://nextjs.org/) (App Router), React 19, TypeScript
-- **Styling & UI:** Tailwind CSS, Framer Motion, Lucide React
-- **Workflow Automation:** [n8n](https://n8n.io/) AI Agent Workflow
-- **AI / LLM Engine:** OpenAI GPT-4.1-mini via n8n LangChain integration
-- **Integration API:** Google Calendar OAuth2 API via n8n tool nodes
-- **Markdown Processor:** `react-markdown` with `remark-gfm`
-
----
-
-## 📁 Repository Structure
+## Project structure
 
 ```text
-n8n-calendar-agent/
-├── app/                  # Next.js 16 App Router (pages, layout, styles)
-├── components/           # UI Components (ChatWindow, ChatInput, ChatMessage, EmptyState, Header, TypingIndicator)
-├── lib/                  # Webhook API client (api.ts) and theme system (theme.ts)
-├── n8n/                  # Exported n8n workflow definitions
-│   └── google_calendar_agent.json
-├── types/                # TypeScript interface & type definitions
-├── scripts/              # Integration verification script (verify-api.ts)
-├── public/               # Static assets & client-side theme initialization
-├── package.json          # Dependency manifest & scripts
-└── tsconfig.json         # TypeScript configuration
+├── app/                 # App Router entry (layout, page, styles)
+├── components/          # Chat UI (window, input, messages, header, empty state)
+├── lib/
+│   ├── api.ts           # Webhook client + response parser
+│   └── theme.ts         # Light/dark theme helpers
+├── n8n/
+│   └── google_calendar_agent.json   # Importable n8n workflow
+├── scripts/
+│   └── verify-api.ts    # Unit checks for parseWebhookResponse
+├── types/
+│   └── chat.ts          # Chat and webhook types
+└── package.json
 ```
 
----
+## How it works
 
-## 🚀 Setup & Installation
+1. The user sends a message in the chat UI.
+2. `sendMessage` in `lib/api.ts` POSTs `{ message, userId }` to the n8n webhook.
+3. n8n maps `body.message` → agent `text` and uses `userId` as the memory session key.
+4. The AI Agent decides whether to create an event or list events, calls the matching Google Calendar tool, and returns a natural-language reply.
+5. n8n responds with plain text (`Respond to Webhook` → `$json.output`).
+6. The UI parses common n8n response shapes (plain text, JSON object/array) and renders markdown.
 
-### 1. Import the n8n Workflow
+Supported agent capabilities in the shipped workflow: **create event** and **get many events**. Update, delete, and invite-management flows are not wired as tools.
 
-1. Open your n8n instance (Cloud or Self-Hosted).
-2. Navigate to **Workflows → Import from File**.
-3. Upload [`n8n/google_calendar_agent.json`](file:///Users/raghhavv03/Workspace/Projects/n8n-calendar-agent/n8n/google_calendar_agent.json).
-4. The workflow includes:
-   - **Execute Workflow Trigger:** Sub-workflow interface accepting `text` and `session.id`.
-   - **AI Agent (LangChain):** System prompt configured with rules for calendar parsing.
-   - **Create Google Calendar Event:** Tool node for event creation.
-   - **Get Many Google Calendar Events:** Tool node for retrieving schedules.
+## Prerequisites
 
-### 2. Configure n8n Credentials
+- Node.js 20+ (recommended) and npm
+- An [n8n](https://n8n.io/) instance (Cloud or self-hosted)
+- OpenAI API credentials in n8n
+- Google Calendar OAuth2 credentials in n8n, with access to the target calendar
 
-In your n8n workspace, add and connect:
-1. **OpenAI API Credential:** Connected to the AI Agent node.
-2. **Google Calendar OAuth2 Credential:** Connected to both Google Calendar tool nodes.
+## Setup
 
-### 3. Setup Parent Webhook Trigger
+### 1. Import the n8n workflow
 
-Create a parent n8n workflow with:
-1. **Webhook Node (POST):** Receives incoming chat messages.
-2. **Execute Workflow Node:** Calls the imported `google_calendar_agent` workflow passing `text` and `session.id`.
-3. **Respond to Webhook Node:** Returns the assistant response back to the client.
+1. In n8n: **Workflows → Import from File**.
+2. Import [`n8n/google_calendar_agent.json`](n8n/google_calendar_agent.json).
+3. Attach credentials:
+   - **OpenAI API** → OpenAI Chat Model node
+   - **Google Calendar OAuth2** → both calendar tool nodes
+4. In both Google Calendar nodes, select the calendar you want the agent to use (the export is bound to a specific demo calendar ID).
+5. Activate the workflow and copy the **Production** webhook URL (prefer production over `webhook-test` for a persistent endpoint).
 
-Copy the active **Production Webhook URL**.
+### 2. Point the frontend at your webhook
 
-### 4. Configure & Run the Frontend
+Edit `lib/api.ts`:
 
-1. Update the webhook endpoint in [`lib/api.ts`](file:///Users/raghhavv03/Workspace/Projects/n8n-calendar-agent/lib/api.ts):
-   ```typescript
-   const WEBHOOK_URL = "https://your-n8n-instance.com/webhook/your-webhook-id";
-   ```
+```typescript
+const WEBHOOK_URL = "https://YOUR_N8N_HOST/webhook/YOUR_WEBHOOK_PATH";
+const USER_ID = "your-stable-user-id";
+```
 
-2. Install dependencies and start the development server:
-   ```bash
-   npm install
-   npm run dev
-   ```
+`USER_ID` is sent on every request and used by n8n memory as the session key. There is no `.env` wiring yet; the URL and user id are constants in source.
 
-3. Open [http://localhost:3000](http://localhost:3000) in your browser.
+### 3. Install and run the UI
 
----
+```bash
+npm install
+npm run dev
+```
 
-## 🧪 Available Scripts
+Open [http://localhost:3000](http://localhost:3000).
 
-| Script | Description |
-| :--- | :--- |
-| `npm run dev` | Starts Next.js development server on port 3000 |
-| `npm run build` | Builds the production Next.js bundle |
-| `npm run start` | Starts the production server |
-| `npm run lint` | Executes ESLint to check for code issues |
-| `npm run test` | Runs the webhook API response parser tests (`scripts/verify-api.ts`) |
-| `npm run verify` | Runs tests, linting, and build validation in sequence |
+## Request / response contract
 
----
+**Request** (JSON body from the UI):
 
-## 📄 License
+```json
+{
+  "message": "Schedule pickleball tomorrow at 7 PM for 1 hour",
+  "userId": "raghav-demo"
+}
+```
 
-This project is open-source and available under the [MIT License](LICENSE).
+**Response:** plain text assistant reply (as configured in the workflow). The client also accepts JSON shapes with `response`, `message`, `output`, `text`, or `reply`, including a one-element array of such objects.
+
+## Scripts
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start Next.js development server |
+| `npm run build` | Production build |
+| `npm run start` | Serve the production build |
+| `npm run lint` | ESLint |
+| `npm run test` | Run `scripts/verify-api.ts` (webhook response parser cases) |
+| `npm run verify` | `test` → `lint` → `build` |
+
+## Usage examples
+
+Once the webhook and credentials are live, try:
+
+- `Schedule a meeting tomorrow at 3 PM for 30 minutes`
+- `Show today's events`
+- `What's on my calendar this week?`
+- `Create Gym at 7 PM`
+
+The empty state includes similar quick prompts.
+
+## Design notes
+
+- The chat UI is client-side only; there is no Next.js API route or database.
+- Clearing the conversation in the UI clears local message state only; n8n buffer memory for that `userId` is unchanged until it ages out of the window.
+- `parseWebhookResponse` is defensive so either n8n text mode or JSON mode works without frontend changes.
+- The workflow’s “If” node returns a webhook response only on the HTTP entry path, so the same agent graph can also be invoked as a sub-workflow.
+
+## Limitations
+
+- Tools cover **create** and **list** only (no update/delete/reschedule tools in the export).
+- Webhook URL and `userId` are hardcoded in `lib/api.ts` (not environment-driven).
+- No end-user authentication; anyone who can reach the UI and webhook can invoke the agent for the configured calendar.
+- UI copy is personalized for a demo (“Hi Raghav”); adjust in `components/EmptyState.tsx` for other audiences.
+- The bundled workflow may reference credential IDs and a calendar from the original n8n instance; reconnect credentials after import.
+
+## Contributing
+
+This repository is a compact demo/portfolio project. If you fork it, keep webhook secrets and Google OAuth credentials out of git, and prefer environment-based configuration for `WEBHOOK_URL` / `USER_ID` before sharing publicly.
